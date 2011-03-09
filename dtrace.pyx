@@ -73,6 +73,7 @@ cdef extern from "dtrace.h":
     int dtrace_setopt(dtrace_hdl_t *handle, char *option, char *value)
     int dtrace_aggregate_snap(dtrace_hdl_t *handle)
     int dtrace_aggregate_walk(dtrace_hdl_t *handle, dtrace_aggregate_f *func, void *args)
+    int dtrace_status(dtrace_hdl_t *handle)
 
 cdef class DtraceConsumer:
     cdef dtrace_hdl_t *dhandle
@@ -140,6 +141,13 @@ cdef class DtraceConsumer:
                             dtrace_errmsg(self.dhandle, dtrace_errno(self.dhandle)))
         # C compiler generates a warning about type of agg_walk()
         # ignore it unless problems arise
+
+        # it is important to do this on a regular basis because it calls the DTRACEIOC_STATUS ioctl
+        # if we don't do it for about 30 seconds, the kernel will send a kill signal
+        if dtrace_status(self.dhandle) == -1:
+            raise Exception("couldn't get status: %s\n" %
+                            dtrace_errmsg(self.dhandle, dtrace_errno(self.dhandle)))
+
         if dtrace_aggregate_walk(self.dhandle, &c_aggwalk, <void *>func) != 0:
             raise Exception("couldn't walk aggregate: %s\n" %
                             dtrace_errmsg(self.dhandle, dtrace_errno(self.dhandle)))
