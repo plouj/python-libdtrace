@@ -5,8 +5,8 @@ cdef extern from "sys/int_limits.h":
     cdef uint32_t UINT32_MAX
     cdef uint64_t UINT16_MAX
     cdef int64_t INT64_MIN
-
-ctypedef char * caddr_t
+cdef extern from "sys/types.h":
+    ctypedef char * caddr_t
 cdef extern from "dtrace-fix.h":
     pass
 cdef extern from "dtrace.h":
