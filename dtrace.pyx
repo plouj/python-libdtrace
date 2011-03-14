@@ -9,6 +9,8 @@ cdef extern from "sys/types.h":
     ctypedef char * caddr_t
 cdef extern from "dtrace-fix.h":
     pass
+cdef extern from "sys/processor.h":
+    ctypedef int processorid_t
 cdef extern from "dtrace.h":
     cdef enum variousStuff:
         DTRACE_AGGWALK_ERROR = -1
@@ -75,8 +77,19 @@ cdef extern from "dtrace.h":
     int dtrace_aggregate_walk(dtrace_hdl_t *handle, dtrace_aggregate_f *func, void *args)
     int dtrace_status(dtrace_hdl_t *handle)
 
+    ctypedef struct dtrace_dropdata_t:
+        dtrace_hdl_t *dtdda_handle		#/* handle to DTrace library */
+        processorid_t dtdda_cpu		#/* CPU, if any */
+        uint64_t dtdda_drops			#/* number of drops */
+        uint64_t dtdda_total			#/* total drops */
+        char *dtdda_msg			#/* preconstructed message */
+
+    ctypedef int dtrace_handle_drop_f(dtrace_dropdata_t *dropinfo, void *arg)
+    int dtrace_handle_drop(dtrace_hdl_t *handler, dtrace_handle_drop_f *drophandler, void *arg)
+
 cdef class DtraceConsumer:
     cdef dtrace_hdl_t *dhandle
+    cdef drop_handler
 
     def __init__(self):
         cdef int err
@@ -128,6 +141,15 @@ cdef class DtraceConsumer:
             raise Exception("couldn't disable tracing: %s\n" %
                             dtrace_errmsg(self.dhandle, dtrace_errno(self.dhandle)))
 
+    cpdef set_drop_handler(self, user_func):
+        """Setup a function to handle buffer drops
+        """
+        self.drop_handler = user_func # save the function reference so
+        # that it doesn't go out of scope
+        if dtrace_handle_drop(self.dhandle, c_drop_handler, <void *>self) != 0:
+            raise Exception("couldn't setup the drop handling function: %s\n" %
+                            dtrace_errmsg(self.dhandle, dtrace_errno(self.dhandle)))
+
     cpdef aggwalk(self, func):
         """
         Snapshot and iterate over all aggregation data accumulated
@@ -151,6 +173,15 @@ cdef class DtraceConsumer:
         if dtrace_aggregate_walk(self.dhandle, &c_aggwalk, <void *>func) != 0:
             raise Exception("couldn't walk aggregate: %s\n" %
                             dtrace_errmsg(self.dhandle, dtrace_errno(self.dhandle)))
+
+cdef int c_drop_handler(dtrace_dropdata_t *dropinfo, void *arg):
+    self_ref = <DtraceConsumer?>arg # get the reference to the dtrace class
+    if self_ref.drop_handler != None:
+        # call the user-defined drop handler
+        return self_ref.drop_handler(dropinfo.dtdda_cpu, dropinfo.dtdda_drops, dropinfo.dtdda_total, dropinfo.dtdda_msg)
+    else:
+        print "python-libdtrace detected: %s" % dropinfo.dtdda_msg
+        return 0
 
 cdef int c_aggwalk(dtrace_aggdata_t *aggdata, void *arg):
     """dtrace_aggregate_walk() from libdtrace actually calls this C
