@@ -146,7 +146,7 @@ cdef class DtraceConsumer:
         """
         self.drop_handler = user_func # save the function reference so
         # that it doesn't go out of scope
-        if dtrace_handle_drop(self.dhandle, c_drop_handler, <void *>self) != 0:
+        if dtrace_handle_drop(self.dhandle, c_drop_handler, <void *>user_func) != 0:
             raise Exception("couldn't setup the drop handling function: %s\n" %
                             dtrace_errmsg(self.dhandle, dtrace_errno(self.dhandle)))
 
@@ -175,10 +175,10 @@ cdef class DtraceConsumer:
                             dtrace_errmsg(self.dhandle, dtrace_errno(self.dhandle)))
 
 cdef int c_drop_handler(dtrace_dropdata_t *dropinfo, void *arg):
-    self_ref = <DtraceConsumer?>arg # get the reference to the dtrace class
-    if self_ref.drop_handler != None:
+    if arg != NULL:
         # call the user-defined drop handler
-        return self_ref.drop_handler(dropinfo.dtdda_cpu, dropinfo.dtdda_drops, dropinfo.dtdda_total, dropinfo.dtdda_msg)
+        func = <object?>arg
+        return func(dropinfo.dtdda_cpu, dropinfo.dtdda_drops, dropinfo.dtdda_total, dropinfo.dtdda_msg)
     else:
         print "python-libdtrace detected: %s" % dropinfo.dtdda_msg
         return 0
