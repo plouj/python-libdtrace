@@ -18,6 +18,7 @@ cdef extern from "dtrace.h":
         DTRACE_AGGWALK_REMOVE = 5
         DTRACEACT_DIFEXPR = 1 #/* action is DIF expression */
         DTRACEACT_AGGREGATION = 0x0700
+        DTRACEAGG_SUM = (DTRACEACT_AGGREGATION + 5)
         DTRACEAGG_LQUANTIZE = (DTRACEACT_AGGREGATION + 8)
 
     ctypedef enum dtrace_probespec_t:
@@ -213,6 +214,8 @@ cdef int c_aggwalk(dtrace_aggdata_t *aggdata, void *arg):
             if data[i+1]:
                 lquantize.append((ranges[i], data[i+1]))
         val = lquantize
+    elif action == DTRACEAGG_SUM:
+        val = (<int64_t *>(aggdata.dtada_data + aggrec.dtrd_offset))[0]
     else:
         raise Exception("Aggregation type (action) %d is not supported" % action)
 
